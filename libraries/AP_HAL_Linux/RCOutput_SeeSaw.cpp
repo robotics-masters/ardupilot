@@ -1,4 +1,4 @@
-#include "RCOutput_PCA9685.h"
+#include "RCOutput_SeeSaw.h"
 
 #include <cmath>
 #include <dirent.h>
@@ -15,68 +15,6 @@
 
 #include "GPIO.h"
 
-#define SEESAW_GPIO_BASE	   0x01
-
-
-// GPIO Registers
-#define SEESAW_GPIO_DIRSET_SINGLE  0x01 // rw: 0x00 is input, 0x01 is output
-#define SEESAW_GPIO_DIRSET 	   0x02 // w: 1 is output
-#define SEESAW_GPIO_DIRCLR	   0x03 // w: 1 is input
-#define SEESAW_GPIO_GPIO	   0x04 // rw: 1 is high, 0 is low
-#define SEESAW_GPIO_SET		   0x05 // w: 1 is high
-#define SEESAW_GPIO_CLR		   0x06 // w: 1 is low
-#define SEESAW_GPIO_TOGGLE	   0x07 // w: 1 toggles
-#define SEESAW_GPIO_INTENSET	   0x08 // w: 1 enables interrupt
-#define SEESAW_GPIO_INTENCLR	   0x09 // w: 1 disables interrupt
-#define SEESAW_GPIO INTFLAG	   0x0A // r: status interrupts
-#define SEESAW_GPIO_PULLENSET	   0x0B // w: 1 enables pullup/down
-#define SEESAW_GPIO_PULLENCLR	   0x0C // w: 1 disables pullup/down
-
-//* ================ Timer ===================== *//
-#define SEESAW_TIMER_BASE 0x08
-
-	/****** STATUS *****/
-	#define SEESAW_TIMER_STATUS 0x00
-
-	//this is asserted when this encorunters an error
-	#define SEESAW_TIMER_STATUS_ERROR_BITS 0x01
-	
-	/****** PWM *****/
-	#define SEESAW_TIMER_PWM 0x01
-	
-	/****** FREQ ****/
-	#define SEESAW_TIMER_FREQ 0x02
-
-
-
-
-#define PCA9685_RA_MODE1           0x00
-#define PCA9685_RA_MODE2           0x01
-#define PCA9685_RA_LED0_ON_L       0x06
-#define PCA9685_RA_LED0_ON_H       0x07
-#define PCA9685_RA_LED0_OFF_L      0x08
-#define PCA9685_RA_LED0_OFF_H      0x09
-#define PCA9685_RA_ALL_LED_ON_L    0xFA
-#define PCA9685_RA_ALL_LED_ON_H    0xFB
-#define PCA9685_RA_ALL_LED_OFF_L   0xFC
-#define PCA9685_RA_ALL_LED_OFF_H   0xFD
-#define PCA9685_RA_PRE_SCALE       0xFE
-
-#define PCA9685_MODE1_RESTART_BIT  (1 << 7)
-#define PCA9685_MODE1_EXTCLK_BIT   (1 << 6)
-#define PCA9685_MODE1_AI_BIT       (1 << 5)
-#define PCA9685_MODE1_SLEEP_BIT    (1 << 4)
-#define PCA9685_MODE1_SUB1_BIT     (1 << 3)
-#define PCA9685_MODE1_SUB2_BIT     (1 << 2)
-#define PCA9685_MODE1_SUB3_BIT     (1 << 1)
-#define PCA9685_MODE1_ALLCALL_BIT  (1 << 0)
-#define PCA9685_ALL_LED_OFF_H_SHUT (1 << 4)
-#define PCA9685_MODE2_INVRT_BIT    (1 << 4)
-#define PCA9685_MODE2_OCH_BIT      (1 << 3)
-#define PCA9685_MODE2_OUTDRV_BIT   (1 << 2)
-#define PCA9685_MODE2_OUTNE1_BIT   (1 << 1)
-#define PCA9685_MODE2_OUTNE0_BIT   (1 << 0)
-
 /*
  * Drift for internal oscillator
  * see: https://github.com/ArduPilot/ardupilot/commit/50459bdca0b5a1adf95
@@ -87,49 +25,32 @@
 
 using namespace Linux;
 
-#define PWM_CHAN_COUNT 16
+#define PWM_CHAN_COUNT 8
 
 static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-RCOutput_PCA9685::RCOutput_PCA9685(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev,
-                                   bool external_clock,
-                                   uint8_t channel_offset,
-                                   int16_t oe_pin_number) :
+RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev) :
     _dev(std::move(dev)),
     _enable_pin(nullptr),
     _frequency(50),
-    _pulses_buffer(new uint16_t[PWM_CHAN_COUNT - channel_offset]),
-    _external_clock(external_clock),
-    _channel_offset(channel_offset),
-    _oe_pin_number(oe_pin_number)
+    _pulses_buffer(new uint16_t[PWM_CHAN_COUNT - channel_offset])
 {
-    if (_external_clock)
-        _osc_clock = PCA9685_EXTERNAL_CLOCK;
-    else
-        _osc_clock = PCA9685_INTERNAL_CLOCK;
 }
 
-RCOutput_PCA9685::~RCOutput_PCA9685()
+RCOutput_SEESAW::~RCOutput_SEESAW()
 {
     delete [] _pulses_buffer;
 }
 
-void RCOutput_PCA9685::init()
+void RCOutput_SEESAW::init()
 {
     reset_all_channels();
 
     /* Set the initial frequency */
     set_freq(0, 50);
-
-    /* Enable PCA9685 PWM */
-    if (_oe_pin_number != -1) {
-        _enable_pin = hal.gpio->channel(_oe_pin_number);
-        _enable_pin->mode(HAL_GPIO_OUTPUT);
-        _enable_pin->write(0);
-    }
 }
 
-void RCOutput_PCA9685::reset_all_channels()
+void RCOutput_SEESAW::reset_all_channels()
 {
     if (!_dev->get_semaphore()->take(10)) {
         return;
@@ -144,7 +65,7 @@ void RCOutput_PCA9685::reset_all_channels()
     _dev->get_semaphore()->give();
 }
 
-void RCOutput_PCA9685::set_freq(uint32_t chmask, uint16_t freq_hz)
+void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
 
     /* Correctly finish last pulses */
@@ -187,22 +108,22 @@ void RCOutput_PCA9685::set_freq(uint32_t chmask, uint16_t freq_hz)
     _dev->get_semaphore()->give();
 }
 
-uint16_t RCOutput_PCA9685::get_freq(uint8_t ch)
+uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 {
     return _frequency;
 }
 
-void RCOutput_PCA9685::enable_ch(uint8_t ch)
+void RCOutput_SEESAW::enable_ch(uint8_t ch)
 {
 
 }
 
-void RCOutput_PCA9685::disable_ch(uint8_t ch)
+void RCOutput_SEESAW::disable_ch(uint8_t ch)
 {
     write(ch, 0);
 }
 
-void RCOutput_PCA9685::write(uint8_t ch, uint16_t period_us)
+void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 {
     if (ch >= (PWM_CHAN_COUNT - _channel_offset)) {
         return;
@@ -217,12 +138,12 @@ void RCOutput_PCA9685::write(uint8_t ch, uint16_t period_us)
     }
 }
 
-void RCOutput_PCA9685::cork()
+void RCOutput_SEESAW::cork()
 {
     _corking = true;
 }
 
-void RCOutput_PCA9685::push()
+void RCOutput_SEESAW::push()
 {
     if (!_corking) {
         return;
@@ -273,12 +194,12 @@ void RCOutput_PCA9685::push()
     _pending_write_mask = 0;
 }
 
-uint16_t RCOutput_PCA9685::read(uint8_t ch)
+uint16_t RCOutput_SEESAW::read(uint8_t ch)
 {
     return _pulses_buffer[ch];
 }
 
-void RCOutput_PCA9685::read(uint16_t* period_us, uint8_t len)
+void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
     for (int i = 0; i < len; i++) {
         period_us[i] = read(0 + i);
