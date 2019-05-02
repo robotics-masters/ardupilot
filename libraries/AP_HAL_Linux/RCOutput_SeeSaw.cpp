@@ -15,14 +15,6 @@
 
 #include "GPIO.h"
 
-/*
- * Drift for internal oscillator
- * see: https://github.com/ArduPilot/ardupilot/commit/50459bdca0b5a1adf95
- * and https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library/issues/11
- */
-#define PCA9685_INTERNAL_CLOCK (1.04f * 25000000.f)
-#define PCA9685_EXTERNAL_CLOCK 24576000.f
-
 using namespace Linux;
 
 #define PWM_CHAN_COUNT 8
@@ -31,7 +23,6 @@ static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev) :
     _dev(std::move(dev)),
-    _enable_pin(nullptr),
     _frequency(50),
     _pulses_buffer(new uint16_t[PWM_CHAN_COUNT - channel_offset])
 {

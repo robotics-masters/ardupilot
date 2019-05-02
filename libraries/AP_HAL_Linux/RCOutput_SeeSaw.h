@@ -10,10 +10,7 @@ namespace Linux {
 
 class RCOutput_SEESAW : public AP_HAL::RCOutput {
 public:
-    RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev,
-                     bool external_clock,
-                     uint8_t channel_offset,
-                     int16_t oe_pin_number);
+    RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev);
 
     ~RCOutput_SEESAW();
     void     init() override;
@@ -31,17 +28,13 @@ public:
 private:
     void reset();
 
-    AP_HAL::DigitalSource *_enable_pin;
     AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev;
     uint16_t _frequency;
-    float _osc_clock;
 
     uint16_t *_pulses_buffer;
 
-    bool _external_clock;
     bool _corking = false;
     uint8_t _channel_offset;
-    int16_t _oe_pin_number;
     uint16_t _pending_write_mask;
 };
 
