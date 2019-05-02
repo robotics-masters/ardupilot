@@ -15,6 +15,41 @@
 
 #include "GPIO.h"
 
+#define SEESAW_GPIO_BASE	   0x01
+
+
+// GPIO Registers
+#define SEESAW_GPIO_DIRSET_SINGLE  0x01 // rw: 0x00 is input, 0x01 is output
+#define SEESAW_GPIO_DIRSET 	   0x02 // w: 1 is output
+#define SEESAW_GPIO_DIRCLR	   0x03 // w: 1 is input
+#define SEESAW_GPIO_GPIO	   0x04 // rw: 1 is high, 0 is low
+#define SEESAW_GPIO_SET		   0x05 // w: 1 is high
+#define SEESAW_GPIO_CLR		   0x06 // w: 1 is low
+#define SEESAW_GPIO_TOGGLE	   0x07 // w: 1 toggles
+#define SEESAW_GPIO_INTENSET	   0x08 // w: 1 enables interrupt
+#define SEESAW_GPIO_INTENCLR	   0x09 // w: 1 disables interrupt
+#define SEESAW_GPIO INTFLAG	   0x0A // r: status interrupts
+#define SEESAW_GPIO_PULLENSET	   0x0B // w: 1 enables pullup/down
+#define SEESAW_GPIO_PULLENCLR	   0x0C // w: 1 disables pullup/down
+
+//* ================ Timer ===================== *//
+#define SEESAW_TIMER_BASE 0x08
+
+	/****** STATUS *****/
+	#define SEESAW_TIMER_STATUS 0x00
+
+	//this is asserted when this encorunters an error
+	#define SEESAW_TIMER_STATUS_ERROR_BITS 0x01
+	
+	/****** PWM *****/
+	#define SEESAW_TIMER_PWM 0x01
+	
+	/****** FREQ ****/
+	#define SEESAW_TIMER_FREQ 0x02
+
+
+
+
 #define PCA9685_RA_MODE1           0x00
 #define PCA9685_RA_MODE2           0x01
 #define PCA9685_RA_LED0_ON_L       0x06

@@ -4,7 +4,7 @@
 
 #include "AP_HAL_Linux.h"
 
-#define SEESAW_PRIMARY_ADDRESS             0x49 // SeeSaw default
+#include "SeeSaw_Registers.h"
 
 namespace Linux {
 
