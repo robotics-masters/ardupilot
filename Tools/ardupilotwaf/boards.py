@@ -732,7 +732,7 @@ class dark(linux):
         )
 
 class pxfmini(linux):
-    toolchain = 'arm-linux-gnueabihf'
+    toolchain = 'native' #'arm-linux-gnueabihf'
 
     def configure_env(self, cfg, env):
         super(pxfmini, self).configure_env(cfg, env)
@@ -742,7 +742,7 @@ class pxfmini(linux):
         )
 
 class robohatmm1(linux):
-    toolchain = 'arm-linux-gnueabihf'
+    toolchain = 'native' #'arm-linux-gnueabihf'
 
     def configure_env(self, cfg, env):
         super(robohatmm1, self).configure_env(cfg, env)
