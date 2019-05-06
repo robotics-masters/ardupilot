@@ -60,7 +60,7 @@ static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
 {
-    _pulses_buffer(new pwm_channel[PWM_CHAN_COUNT]); /* note the zero-filling constructor */
+   _pulses_buffer = new pwm_channel[PWM_CHAN_COUNT];  /* note the zero-filling constructor */
 }
 
 /* standard destructor */
@@ -103,9 +103,9 @@ void RCOutput_SEESAW::reset_all_channels()
 	{
 		/* zero each channel period_us */
 		
-		// write(ch,0); /* not needed because arlready executed in set_freq() to finish all pulses */
+		// write(ch,0); /* not needed because already executed in set_freq() to finish all pulses */
 		
-		(*_pulses_buffer)[ch].period_us = 0; /* simply zero the period in the local buffer */
+		_pulses_buffer[ch].period_us = 0; /* simply zero the period in the local buffer */
 		
 		/* set as many lsb in the mask as there are channels */
 		chmask<<=1;
@@ -144,7 +144,7 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
     cork();
     
     for (int i = 0; i < PWM_CHAN_COUNT; i++) {
-        write(i, _pulses_buffer[i]);
+        write(i, _pulses_buffer[i].freq_hz);
     }
 	
 	push();
@@ -158,12 +158,13 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 
 	bool sem = false;
 			
-	for(int i=0; i<CRICKIT_NUM_PWM; i++){
+	for(int i=0; i< PWM_CHAN_COUNT; i++){
 		
 		if(chmask&1){
 		
 			/* set semaphore if not yet so */
 			if (sem == false)
+			{
 				if (!_dev->get_semaphore()->take(10)) {
 					/* crash out if fails */
 				    break;
@@ -172,7 +173,7 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 			}
 
 			/* set local copy */
-			(*_pulses_buffer)[ch].freq_hz = freq_hz;
+			_pulses_buffer[ch].freq_hz = freq_hz;
 			
 			uint8_t cmd[] = {(uint8_t)i, (uint8_t)(freq_hz >> 8), (uint8_t)freq_hz};
 			writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_FREQ, cmd, 3);
@@ -182,8 +183,7 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 	}
 	
 	/* release the semaphore if set */
-	if (sem)
-	    _dev->get_semaphore()->give();
+	_dev->get_semaphore()->give();
 
 }
 

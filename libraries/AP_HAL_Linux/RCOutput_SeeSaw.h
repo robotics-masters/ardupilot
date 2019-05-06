@@ -80,7 +80,7 @@ public:
 
 private:
     void 	 reset();
-    void     write8(byte regHigh, byte regLow, byte value);
+    void     write8(uint8_t regHigh, uint8_t regLow, uint8_t value);
 	void 	 writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num);
 
     AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev;
