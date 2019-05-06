@@ -1,3 +1,20 @@
+/*!
+ * @file RCOutput_SeeSaw.cpp
+ *
+ * You may refer to: @file Adafruit_seesaw.cpp for original implementation on Adafruit
+ *
+ * This is part of Ardupilot's seesaw driver.
+ *
+ * These chips use I2C to communicate, 2 pins (SCL+SDA) are required
+ * to interface with the board.
+ *
+ * The implementatio is based on original Adafruit's seesaw driver for the Arduino platform and 
+ * Ardupilot RCOutput_PCA9685 driver for implementation reference
+ *
+ * Authors: Cian Byrne & Pietro Mincuzzi
+ *
+ */
+
 #include "RCOutput_SeeSaw.h"
 
 #include <cmath>
@@ -17,182 +34,432 @@
 
 using namespace Linux;
 
-#define PWM_CHAN_COUNT 8
 
+//the pwm pins
+#define CRICKIT_NUM_PWM 12
+static const uint8_t CRICKIT_pwms[CRICKIT_NUM_PWM] = {CRICKIT_SERVO4, CRICKIT_SERVO3, CRICKIT_SERVO2, CRICKIT_SERVO1,
+						      CRICKIT_MOTOR_B1, CRICKIT_MOTOR_B2, CRICKIT_MOTOR_A1, CRICKIT_MOTOR_A2, 
+						      CRICKIT_DRIVE4, CRICKIT_DRIVE3, CRICKIT_DRIVE2, CRICKIT_DRIVE1};
+//the adc pin
+#define CRICKIT_NUM_ADC 8
+static const uint8_t CRICKIT_adc[CRICKIT_NUM_ADC] = { CRICKIT_SIGNAL1, CRICKIT_SIGNAL2, CRICKIT_SIGNAL3, CRICKIT_SIGNAL4,
+						      CRICKIT_SIGNAL5, CRICKIT_SIGNAL6, CRICKIT_SIGNAL7, CRICKIT_SIGNAL8 };						      
+
+#define PWM_CHAN_COUNT CRICKIT_NUM_PWM
+						      
 static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
-RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev) :
-    _dev(std::move(dev)),
-    _frequency(50),
-    _pulses_buffer(new uint16_t[PWM_CHAN_COUNT - channel_offset])
+/**
+ *****************************************************************************************
+ *  @brief      Create a RCOutput_SEESAW object on a given I2C Device.
+ *              The channel I2C device in use is specified as an AP_HAL::I2CDevice
+ *              as installed in the linux /sys/class/i2c-dev/ path
+ *
+ *  @param      dev the I2C Device connected to the seesaw board
+ ****************************************************************************************/
+
+RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
 {
+    _pulses_buffer(new pwm_channel[PWM_CHAN_COUNT]); /* note the zero-filling constructor */
 }
+
+/* standard destructor */
 
 RCOutput_SEESAW::~RCOutput_SEESAW()
 {
     delete [] _pulses_buffer;
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      perform a software reset. This resets all seesaw registers to their default values.
+ *				Then it resets all channel
+ *
+ *  			The software reste is taken from Adafruit_seesaw::SWReset()
+ * 
+ *
+ *  @return     none
+ ****************************************************************************************/
+
 void RCOutput_SEESAW::init()
 {
-    reset_all_channels();
-
-    /* Set the initial frequency */
-    set_freq(0, 50);
+	this->write8(SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF);
+	reset_all_channels();
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      Set all PWM channels to 0 frequency 0 value
+ * 
+ *
+ *  @return     none
+ ****************************************************************************************/
 void RCOutput_SEESAW::reset_all_channels()
 {
-    if (!_dev->get_semaphore()->take(10)) {
-        return;
-    }
 
-    uint8_t data[] = {PCA9685_RA_ALL_LED_ON_L, 0, 0, 0, 0};
-    _dev->transfer(data, sizeof(data), nullptr, 0);
+	uint32_t chmask;
+
+	for (uint8_t ch =0; ch < PWM_CHAN_COUNT; ch++)
+	{
+		/* zero each channel period_us */
+		
+		// write(ch,0); /* not needed because arlready executed in set_freq() to finish all pulses */
+		
+		(*_pulses_buffer)[ch].period_us = 0; /* simply zero the period in the local buffer */
+		
+		/* set as many lsb in the mask as there are channels */
+		chmask<<=1;
+		chmask++;
+	}
+	
+	/* zeroes all channels period_us and frequency at once*/
+	set_freq(chmask,0);
 
     /* Wait for the last pulse to end */
-    hal.scheduler->delay(2);
-
-    _dev->get_semaphore()->give();
+	hal.scheduler->delay(2);
+	
 }
+
+/**
+ *****************************************************************************************
+ *  @brief      set the PWM frequency of a PWM channel. 
+ *				The implementation assumes max 32 channels and each with independent frequency
+ *				control. The function can set them all (PWM_CHAN_COUNT = 8)
+ * 
+ *  @param      chmask. 32 bit mask representing the channels to be affected
+ *				where bit 0 -> channel 0 and bit 31 -> channel 31
+ *	@param		freq the frequency to set (max freq = 0XFFFE)
+ *
+ *  @return     none
+ *
+ *  @Note		Functions fails silently if cannot get a semaphore from the device
+ *
+ ****************************************************************************************/
 
 void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
 
-    /* Correctly finish last pulses */
-    for (int i = 0; i < (PWM_CHAN_COUNT - _channel_offset); i++) {
+    /* Correctly finish last pulses ( this is from original RCOutput_PCA9685 class) */
+    
+    cork();
+    
+    for (int i = 0; i < PWM_CHAN_COUNT; i++) {
         write(i, _pulses_buffer[i]);
     }
+	
+	push();
+	
+	/* find the proper register */
+	uint8_t pin;
+	
+	// limit max freq reserving value 0XFFFF for error handling
+	if (freq_hz == 0XFFFF)
+		freq_hz--;
 
-    if (!_dev->get_semaphore()->take(10)) {
-        return;
-    }
+	bool sem = false;
+			
+	for(int i=0; i<CRICKIT_NUM_PWM; i++){
+		
+		if(chmask&1){
+		
+			/* set semaphore if not yet so */
+			if (sem == false)
+				if (!_dev->get_semaphore()->take(10)) {
+					/* crash out if fails */
+				    break;
+				}
+				sem = true;
+			}
 
-    /* Shutdown before sleeping.
-     * see p.14 of PCA9685 product datasheet
-     */
-    _dev->write_register(PCA9685_RA_ALL_LED_OFF_H, PCA9685_ALL_LED_OFF_H_SHUT);
+			/* set local copy */
+			(*_pulses_buffer)[ch].freq_hz = freq_hz;
+			
+			uint8_t cmd[] = {(uint8_t)i, (uint8_t)(freq_hz >> 8), (uint8_t)freq_hz};
+			writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_FREQ, cmd, 3);
+		
+		}
+		chmask>>=1;
+	}
+	
+	/* release the semaphore if set */
+	if (sem)
+	    _dev->get_semaphore()->give();
 
-    /* Put PCA9685 to sleep (required to write prescaler) */
-    _dev->write_register(PCA9685_RA_MODE1, PCA9685_MODE1_SLEEP_BIT);
-
-    /* Calculate prescale and save frequency using this value: it may be
-     * different from @freq_hz due to rounding/ceiling. We use ceil() rather
-     * than round() so the resulting frequency is never greater than @freq_hz
-     */
-    uint8_t prescale = ceilf(_osc_clock / (4096 * freq_hz)) - 1;
-    _frequency = _osc_clock / (4096 * (prescale + 1));
-
-    /* Write prescale value to match frequency */
-    _dev->write_register(PCA9685_RA_PRE_SCALE, prescale);
-
-    if (_external_clock) {
-        /* Enable external clocking */
-        _dev->write_register(PCA9685_RA_MODE1,
-                             PCA9685_MODE1_SLEEP_BIT | PCA9685_MODE1_EXTCLK_BIT);
-    }
-
-    /* Restart the device to apply new settings and enable auto-incremented write */
-    _dev->write_register(PCA9685_RA_MODE1,
-                         PCA9685_MODE1_RESTART_BIT | PCA9685_MODE1_AI_BIT);
-
-    _dev->get_semaphore()->give();
 }
+
+/**
+ *****************************************************************************************
+ *  @brief      Get the PWM frequency of a PWM channel. 
+ * 
+ *  @param      ch. The channel to read
+ *
+ *  @return     a uint16_t representing the frequency read from the local buffer.
+ *              returns 0XFFFF in case of error
+ *
+ ****************************************************************************************/
 
 uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 {
-    return _frequency;
+	/* error handling */
+	if (ch >= PWM_CHAN_COUNT)
+		return 0XFFFF;	
+		
+    return (*_pulses_buffer)[ch].freq_hz;
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      Enable a channel. 
+ * 
+ *  @param      ch. The channel to enable
+ *				the function is only provided for compatibility but has no implementation
+ *				as all channels are always enabled
+ *
+ *  @return     none
+ *
+ ****************************************************************************************/
+ 
 void RCOutput_SEESAW::enable_ch(uint8_t ch)
 {
-
+	/* error handling */
+	if (ch >= PWM_CHAN_COUNT)
+		return;
+			
+	/* not implemented. Channels always enabled */
 }
 
-void RCOutput_SEESAW::disable_ch(uint8_t ch)
+/**
+ *****************************************************************************************
+ *  @brief      Disable a channel. 
+ * 
+ *  @param      ch. The channel to Disable
+ *				Simply resets the channel
+ *
+ *  @return     none
+ *
+ ****************************************************************************************/
+ void RCOutput_SEESAW::disable_ch(uint8_t ch)
 {
-    write(ch, 0);
+    /* error handling */
+	if (ch >= PWM_CHAN_COUNT)
+		return -1;	
+	
+	(*_pulses_buffer)[ch].period_us = 0; /* zero the period in the local buffer */
+	
+	uint32_t chmask = 1U;
+	
+	/* build channel mask with only one channel */
+	for (uint8_t i=0;i<ch;i++)
+		chmask<<=1;
+		
+	set_freq(chmask,0);
 }
+
+/**
+ *****************************************************************************************
+ *  @brief      set the PWM duty cycle. 
+ * 				If corking then the value is only set in the local buffer and it will be 
+ *				released when calling push()
+ *  @param      ch. channel to be controlled
+ *	@param		period_us. Value to be set. Valid value from 0 to 0XFFFE. 0XFFFF reserved for error
+ *
+ *  @return     none
+ ****************************************************************************************/
 
 void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 {
-    if (ch >= (PWM_CHAN_COUNT - _channel_offset)) {
+	/* error handling */
+    if (ch >= PWM_CHAN_COUNT {
         return;
     }
+    
+    if(period_us == 0XFFFF)
+    	period_us--;
 
-    _pulses_buffer[ch] = period_us;
+    (*_pulses_buffer)[ch].period_us = period_us;
     _pending_write_mask |= (1U << ch);
-
+    
     if (!_corking) {
         _corking = true;
         push();
     }
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      set the corking mode. 
+ * 				If corking then the PWM values are only set in the local buffer by write()
+ *              and they will be released when push() is called
+ *
+ *  @return     none
+ ****************************************************************************************/
+
 void RCOutput_SEESAW::cork()
 {
     _corking = true;
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      push all updated PWM values to the PWM channels. 
+ *
+ *  @return     none
+ *
+ *  @Note		Functions fails silently if cannot get a semaphore from the device
+ *
+ ****************************************************************************************/
+
 void RCOutput_SEESAW::push()
 {
+	/* corking is set iether explicitly or within the write() function */
     if (!_corking) {
         return;
     }
     _corking = false;
 
+	/* do nothing is no pending channel updates */
     if (_pending_write_mask == 0)
         return;
 
-    // Calculate the number of channels for this transfer.
-    uint8_t max_ch = (sizeof(unsigned) * 8) - __builtin_clz(_pending_write_mask);
-    uint8_t min_ch = __builtin_ctz(_pending_write_mask);
+	uint32_t = channel_mask = 1U;
 
-    /*
-     * scratch buffer size is always for all the channels, but we write only
-     * from min_ch to max_ch
-     */
-    struct PACKED pwm_values {
-        uint8_t reg;
-        uint8_t data[PWM_CHAN_COUNT * 4];
-    } pwm_values;
+	bool sem = false;
+			
+	for(int i=0; i<PWM_CHAN_COUNT; i++){
+	
+		if(_pending_write_mask & channel_mask)
+		{
+			/* set semaphore if not yet so */
+			if (sem == false)
+				if (!_dev->get_semaphore()->take(10)) {
+					/* crash out if fails */
+				    break;
+				}
+				sem = true;
+			}
 
-    for (unsigned ch = min_ch; ch < max_ch; ch++) {
-        uint16_t period_us = _pulses_buffer[ch];
-        uint16_t length = 0;
+			uint16_t period_us = (*_pulses_buffer)[i].period_us;
+			uint8_t cmd[] = {(uint8_t)i, (uint8_t)(period_us >> 8), (uint8_t)period_us};
+			this->writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_PWM, cmd, 3);
+		}
+		
+		channel_mask <<=1;
+	}
 
-        if (period_us) {
-            length = round((period_us * 4096) / (1000000.f / _frequency)) - 1;
-        }
-
-        uint8_t *d = &pwm_values.data[(ch - min_ch) * 4];
-        *d++ = 0;
-        *d++ = 0;
-        *d++ = length & 0xFF;
-        *d++ = length >> 8;
-    }
-
-    if (!_dev->get_semaphore()->take_nonblocking()) {
-        return;
-    }
-
-    pwm_values.reg = PCA9685_RA_LED0_ON_L + 4 * (_channel_offset + min_ch);
-    /* reg + all the channels we are going to write */
-    size_t payload_size = 1 + (max_ch - min_ch) * 4;
-
-    _dev->transfer((uint8_t *)&pwm_values, payload_size, nullptr, 0);
-    _dev->get_semaphore()->give();
     _pending_write_mask = 0;
+
+	/* release the semaphore if set */
+	if (sem)
+	    _dev->get_semaphore()->give();
+
+
 }
 
+
+/**
+ *****************************************************************************************
+ *  @brief      Get the PWM period of a PWM channel. 
+ * 
+ *  @param      ch. The channel to read
+ *
+ *  @return     a uint16_t representing the perio read from the local buffer.
+ *              returns 0XFFFF in case of error
+ *
+ ****************************************************************************************/
 uint16_t RCOutput_SEESAW::read(uint8_t ch)
 {
-    return _pulses_buffer[ch];
+
+	/* error handling */
+	if (ch >= PWM_CHAN_COUNT)
+		return 0XFFFF;	
+		
+    return (*_pulses_buffer)[ch].period_us;
 }
 
+/**
+ *****************************************************************************************
+ *  @brief      Get the PWM period of a number of PWM channels from channel 0. 
+ *				Reads as many chennels as requested within the maximum of exostong channels
+ *				remaining values in the buffer if any are set of 0XFFFF
+ *
+ *  @param		period_us. Pointer to an array of uint16_t to receive the values
+ *  @param      len. The numebr of channels to read
+ *
+ *  @return     none
+ *
+ ****************************************************************************************/
 void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
     for (int i = 0; i < len; i++) {
-        period_us[i] = read(0 + i);
+    	if (i<PWM_CHAN_COUNT)
+        	period_us[i] = (*_pulses_buffer)[ch].period_us;
+    	else
+    		period_us[i] = 0XFFFF;
     }
 }
+
+/**
+ *****************************************************************************************
+ *  @brief      Write 1 byte to the specified seesaw register.
+ * 
+ *  @param      regHigh the module address register (ex. SEESAW_NEOPIXEL_BASE)
+ *	@param		regLow the function address register (ex. SEESAW_NEOPIXEL_PIN)
+ *	@param		value the value between 0 and 255 to write
+ *
+ *  @Note		Functions fails silently if cannot get a semaphore from the device
+ *
+  ****************************************************************************************/
+void Adafruit_seesaw::write8(byte regHigh, byte regLow, byte value)
+{
+	if (!_dev->get_semaphore()->take_nonblocking()) {
+	    break;
+	}
+
+	writeI2C(regHigh, regLow, &value, 1);
+	
+    _dev->get_semaphore()->give();
+
+}
+/**
+ *****************************************************************************************
+ *  @brief      Write a specified number of bytes to the seesaw from the passed buffer 
+ *              through the HAL I2C driver (asynchronous).
+ *
+ *				The function acts as a bridge through the Adafruit_seesaw driver that uses
+ *              direct _i2cbus->write to the i2c channel and the HAL I2C driver that runs 
+ *              asynchronously.
+ * 
+ *  @param      regHigh the module address register (ex. SEESAW_GPIO_BASE)
+ *  @param		regLow the function address register (ex. SEESAW_GPIO_BULK_SET)
+ *  @param		buf the buffer the the bytes from
+ *  @param		num the number of bytes to write.
+ *
+ *  @return     none
+ *
+ *	@note		The functions does not hanlde the semaphore that must be handled by the calling function!
+ *
+ ****************************************************************************************/
+void Adafruit_seesaw::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
+{
+
+	size_t payload_size = 2+num;
+	uint8_t I2C_values[payload_size];
+	uint16_t p=0;
+	
+	I2C_values[p++]=(uint8_t)regHigh;
+	I2C_values[p++]=(uint8_t)regLow;
+
+	for (i=0;i<num;i++,p++)
+	{
+		I2C_values[p++]=*buf++;
+	}
+
+    _dev->transfer((uint8_t *)&I2C_values, payload_size, nullptr, 0);
+
+}
+
+  
+  
+}
+
+
