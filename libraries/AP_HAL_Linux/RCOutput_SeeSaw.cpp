@@ -97,7 +97,7 @@ void RCOutput_SEESAW::init()
 void RCOutput_SEESAW::reset_all_channels()
 {
 
-	uint32_t chmask;
+	uint32_t chmask = 1U;
 
 	for (uint8_t ch =0; ch < PWM_CHAN_COUNT; ch++)
 	{
@@ -149,16 +149,13 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 	
 	push();
 	
-	/* find the proper register */
-	uint8_t pin;
-	
 	// limit max freq reserving value 0XFFFF for error handling
 	if (freq_hz == 0XFFFF)
 		freq_hz--;
 
 	bool sem = false;
 			
-	for(int i=0; i< PWM_CHAN_COUNT; i++){
+	for(int ch=0; ch< PWM_CHAN_COUNT; ch++){
 		
 		if(chmask&1){
 		
@@ -175,7 +172,7 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 			/* set local copy */
 			_pulses_buffer[ch].freq_hz = freq_hz;
 			
-			uint8_t cmd[] = {(uint8_t)i, (uint8_t)(freq_hz >> 8), (uint8_t)freq_hz};
+			uint8_t cmd[] = {(uint8_t) ch, (uint8_t)(freq_hz >> 8), (uint8_t)freq_hz};
 			writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_FREQ, cmd, 3);
 		
 		}
@@ -202,9 +199,9 @@ uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 {
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
-		return 0XFFFF;	
+		return 0xFFFF;	
 		
-    return (*_pulses_buffer)[ch].freq_hz;
+    return _pulses_buffer[ch].freq_hz;
 }
 
 /**
@@ -242,9 +239,9 @@ void RCOutput_SEESAW::enable_ch(uint8_t ch)
 {
     /* error handling */
 	if (ch >= PWM_CHAN_COUNT)
-		return -1;	
+		return;	
 	
-	(*_pulses_buffer)[ch].period_us = 0; /* zero the period in the local buffer */
+	_pulses_buffer[ch].period_us = 0; /* zero the period in the local buffer */
 	
 	uint32_t chmask = 1U;
 	
@@ -269,14 +266,14 @@ void RCOutput_SEESAW::enable_ch(uint8_t ch)
 void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 {
 	/* error handling */
-    if (ch >= PWM_CHAN_COUNT {
+    if (ch >= PWM_CHAN_COUNT ) {
         return;
     }
     
     if(period_us == 0XFFFF)
     	period_us--;
 
-    (*_pulses_buffer)[ch].period_us = period_us;
+    _pulses_buffer[ch].period_us = period_us;
     _pending_write_mask |= (1U << ch);
     
     if (!_corking) {
@@ -317,20 +314,20 @@ void RCOutput_SEESAW::push()
     }
     _corking = false;
 
-	/* do nothing is no pending channel updates */
-    if (_pending_write_mask == 0)
+    /* do nothing is no pending channel updates */
+    if (_pending_write_mask == 0){
         return;
-
-	uint32_t = channel_mask = 1U;
+    }
+	uint32_t channel_mask = 1U;
 
 	bool sem = false;
 			
-	for(int i=0; i<PWM_CHAN_COUNT; i++){
+	for(int ch=0; ch<PWM_CHAN_COUNT; ch++){
 	
 		if(_pending_write_mask & channel_mask)
 		{
 			/* set semaphore if not yet so */
-			if (sem == false)
+			if (sem == false) {
 				if (!_dev->get_semaphore()->take(10)) {
 					/* crash out if fails */
 				    break;
@@ -338,8 +335,8 @@ void RCOutput_SEESAW::push()
 				sem = true;
 			}
 
-			uint16_t period_us = (*_pulses_buffer)[i].period_us;
-			uint8_t cmd[] = {(uint8_t)i, (uint8_t)(period_us >> 8), (uint8_t)period_us};
+			uint16_t period_us = _pulses_buffer[ch].period_us;
+			uint8_t cmd[] = {(uint8_t) ch, (uint8_t)(period_us >> 8), (uint8_t)period_us};
 			this->writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_PWM, cmd, 3);
 		}
 		
@@ -349,8 +346,7 @@ void RCOutput_SEESAW::push()
     _pending_write_mask = 0;
 
 	/* release the semaphore if set */
-	if (sem)
-	    _dev->get_semaphore()->give();
+	_dev->get_semaphore()->give();
 
 
 }
@@ -373,7 +369,7 @@ uint16_t RCOutput_SEESAW::read(uint8_t ch)
 	if (ch >= PWM_CHAN_COUNT)
 		return 0XFFFF;	
 		
-    return (*_pulses_buffer)[ch].period_us;
+    return _pulses_buffer[ch].period_us;
 }
 
 /**
@@ -392,7 +388,7 @@ void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
     for (int i = 0; i < len; i++) {
     	if (i<PWM_CHAN_COUNT)
-        	period_us[i] = (*_pulses_buffer)[ch].period_us;
+        	period_us[i] = _pulses_buffer[i].period_us;
     	else
     		period_us[i] = 0XFFFF;
     }
@@ -409,10 +405,10 @@ void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
  *  @Note		Functions fails silently if cannot get a semaphore from the device
  *
   ****************************************************************************************/
-void Adafruit_seesaw::write8(byte regHigh, byte regLow, byte value)
+void RCOutput_SEESAW::write8(uint8_t regHigh, uint8_t regLow, uint8_t value)
 {
 	if (!_dev->get_semaphore()->take_nonblocking()) {
-	    break;
+	    return;
 	}
 
 	writeI2C(regHigh, regLow, &value, 1);
@@ -439,7 +435,7 @@ void Adafruit_seesaw::write8(byte regHigh, byte regLow, byte value)
  *	@note		The functions does not hanlde the semaphore that must be handled by the calling function!
  *
  ****************************************************************************************/
-void Adafruit_seesaw::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
+void RCOutput_SEESAW::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
 {
 
 	size_t payload_size = 2+num;
@@ -449,7 +445,7 @@ void Adafruit_seesaw::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, ui
 	I2C_values[p++]=(uint8_t)regHigh;
 	I2C_values[p++]=(uint8_t)regLow;
 
-	for (i=0;i<num;i++,p++)
+	for (int i=0;i<num;i++,p++)
 	{
 		I2C_values[p++]=*buf++;
 	}
@@ -457,9 +453,3 @@ void Adafruit_seesaw::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, ui
     _dev->transfer((uint8_t *)&I2C_values, payload_size, nullptr, 0);
 
 }
-
-  
-  
-}
-
-
