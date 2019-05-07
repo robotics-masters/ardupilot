@@ -99,7 +99,7 @@ SEESAW_DEBUG
 	this->write8(SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF);
     /* Wait for the last pulse to end */
 	hal.scheduler->delay(500);
-	reset_all_channels();
+	/* reset_all_channels(); */
 }
 
 /**
