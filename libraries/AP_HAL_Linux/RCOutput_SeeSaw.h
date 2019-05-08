@@ -67,6 +67,7 @@ public:
 
     ~RCOutput_SEESAW();
     void     init() override;
+    void     SWreset();
     void     reset_all_channels();
     void     set_freq(uint32_t chmask, uint16_t freq_hz) override;
     uint16_t get_freq(uint8_t ch) override;

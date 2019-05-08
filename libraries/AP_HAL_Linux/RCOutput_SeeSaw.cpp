@@ -96,10 +96,25 @@ SEESAW_DEBUG
 void RCOutput_SEESAW::init()
 {
 SEESAW_DEBUG
-	this->write8(SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF);
-    /* Wait for the last pulse to end */
+	SWreset();
 	reset_all_channels();
 }
+
+
+void RCOutput_SEESAW::SWreset()
+{
+	if (!_dev->get_semaphore()->take(10)) {
+            return;
+    	}
+	
+	uint8_t data[] = {SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF};
+	_dev->transfer(data, sizeof(data), nullptr, 0);
+
+	/* Wait for the last pulse to end */
+    	hal.scheduler->delay(500);
+	_dev->get_semaphore()->give();
+}
+
 
 /**
  *****************************************************************************************
@@ -434,7 +449,7 @@ SEESAW_DEBUG
 	if (!_dev->get_semaphore()->take_nonblocking()) {
 	    return;
 	}
-
+	
 	writeI2C(regHigh, regLow, &value, 1);
 	
     _dev->get_semaphore()->give();
