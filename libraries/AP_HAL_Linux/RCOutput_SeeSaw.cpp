@@ -33,7 +33,16 @@
 #include "GPIO.h"
 
 using namespace Linux;
+/* only for debug */
 
+#define SEESAW_DEB 
+#ifdef SEESAW_DEB 
+#define SEESAW_DEBUG printf ("__PRETTY_FUNCTION__ = %s\n", __PRETTY_FUNCTION__); 
+#define SEESAW_DEBUGP 
+#else
+#define SEESAW_DEBUG  
+#define SEESAW_DEBUGP /##/
+#endif
 
 //the pwm pins
 #define CRICKIT_NUM_PWM 12
@@ -45,7 +54,7 @@ static const uint8_t CRICKIT_pwms[CRICKIT_NUM_PWM] = {CRICKIT_SERVO4, CRICKIT_SE
 static const uint8_t CRICKIT_adc[CRICKIT_NUM_ADC] = { CRICKIT_SIGNAL1, CRICKIT_SIGNAL2, CRICKIT_SIGNAL3, CRICKIT_SIGNAL4,
 						      CRICKIT_SIGNAL5, CRICKIT_SIGNAL6, CRICKIT_SIGNAL7, CRICKIT_SIGNAL8 };						      
 
-#define PWM_CHAN_COUNT CRICKIT_NUM_PWM
+#define PWM_CHAN_COUNT 8
 						      
 static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
@@ -58,8 +67,10 @@ static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
  *  @param      dev the I2C Device connected to the seesaw board
  ****************************************************************************************/
 
-RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
+RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev) :
+_dev(std::move(dev))
 {
+SEESAW_DEBUG
    _pulses_buffer = new pwm_channel[PWM_CHAN_COUNT];  /* note the zero-filling constructor */
 }
 
@@ -67,6 +78,7 @@ RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev)
 
 RCOutput_SEESAW::~RCOutput_SEESAW()
 {
+SEESAW_DEBUG
     delete [] _pulses_buffer;
 }
 
@@ -83,7 +95,10 @@ RCOutput_SEESAW::~RCOutput_SEESAW()
 
 void RCOutput_SEESAW::init()
 {
+SEESAW_DEBUG
 	this->write8(SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF);
+    /* Wait for the last pulse to end */
+	hal.scheduler->delay(500);
 	reset_all_channels();
 }
 
@@ -96,6 +111,7 @@ void RCOutput_SEESAW::init()
  ****************************************************************************************/
 void RCOutput_SEESAW::reset_all_channels()
 {
+SEESAW_DEBUG
 
 	uint32_t chmask = 1U;
 
@@ -116,7 +132,7 @@ void RCOutput_SEESAW::reset_all_channels()
 	set_freq(chmask,0);
 
     /* Wait for the last pulse to end */
-	hal.scheduler->delay(2);
+	hal.scheduler->delay(500);
 	
 }
 
@@ -138,7 +154,7 @@ void RCOutput_SEESAW::reset_all_channels()
 
 void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
-
+SEESAW_DEBUG
     /* Correctly finish last pulses ( this is from original RCOutput_PCA9685 class) */
     
     cork();
@@ -197,6 +213,7 @@ void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 
 uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 {
+SEESAW_DEBUG
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
 		return 0xFFFF;	
@@ -218,6 +235,7 @@ uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
  
 void RCOutput_SEESAW::enable_ch(uint8_t ch)
 {
+SEESAW_DEBUG
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
 		return;
@@ -237,6 +255,7 @@ void RCOutput_SEESAW::enable_ch(uint8_t ch)
  ****************************************************************************************/
  void RCOutput_SEESAW::disable_ch(uint8_t ch)
 {
+SEESAW_DEBUG
     /* error handling */
 	if (ch >= PWM_CHAN_COUNT)
 		return;	
@@ -265,6 +284,7 @@ void RCOutput_SEESAW::enable_ch(uint8_t ch)
 
 void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 {
+SEESAW_DEBUG
 	/* error handling */
     if (ch >= PWM_CHAN_COUNT ) {
         return;
@@ -293,6 +313,7 @@ void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 
 void RCOutput_SEESAW::cork()
 {
+SEESAW_DEBUG
     _corking = true;
 }
 
@@ -308,6 +329,7 @@ void RCOutput_SEESAW::cork()
 
 void RCOutput_SEESAW::push()
 {
+SEESAW_DEBUG
 	/* corking is set iether explicitly or within the write() function */
     if (!_corking) {
         return;
@@ -364,6 +386,7 @@ void RCOutput_SEESAW::push()
  ****************************************************************************************/
 uint16_t RCOutput_SEESAW::read(uint8_t ch)
 {
+SEESAW_DEBUG
 
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
@@ -386,6 +409,7 @@ uint16_t RCOutput_SEESAW::read(uint8_t ch)
  ****************************************************************************************/
 void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
+SEESAW_DEBUG
     for (int i = 0; i < len; i++) {
     	if (i<PWM_CHAN_COUNT)
         	period_us[i] = _pulses_buffer[i].period_us;
@@ -407,6 +431,7 @@ void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
   ****************************************************************************************/
 void RCOutput_SEESAW::write8(uint8_t regHigh, uint8_t regLow, uint8_t value)
 {
+SEESAW_DEBUG
 	if (!_dev->get_semaphore()->take_nonblocking()) {
 	    return;
 	}
@@ -437,19 +462,23 @@ void RCOutput_SEESAW::write8(uint8_t regHigh, uint8_t regLow, uint8_t value)
  ****************************************************************************************/
 void RCOutput_SEESAW::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
 {
+SEESAW_DEBUG
 
 	size_t payload_size = 2+num;
 	uint8_t I2C_values[payload_size];
 	uint16_t p=0;
 	
 	I2C_values[p++]=(uint8_t)regHigh;
+SEESAW_DEBUGP printf("frame: %02X ",(uint8_t)regHigh);
 	I2C_values[p++]=(uint8_t)regLow;
+SEESAW_DEBUGP printf("%02X ",(uint8_t)regLow);
 
 	for (int i=0;i<num;i++,p++)
 	{
 		I2C_values[p++]=*buf++;
+SEESAW_DEBUGP printf("%02X ",(uint8_t)I2C_values[p-1]);
 	}
-
+SEESAW_DEBUGP printf("\n");
     _dev->transfer((uint8_t *)&I2C_values, payload_size, nullptr, 0);
 
 }
