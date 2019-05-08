@@ -98,8 +98,7 @@ void RCOutput_SEESAW::init()
 SEESAW_DEBUG
 	this->write8(SEESAW_STATUS_BASE, SEESAW_STATUS_SWRST, 0xFF);
     /* Wait for the last pulse to end */
-	hal.scheduler->delay(500);
-	/* reset_all_channels(); */
+	reset_all_channels();
 }
 
 /**
@@ -479,6 +478,8 @@ SEESAW_DEBUGP printf("%02X ",(uint8_t)regLow);
 SEESAW_DEBUGP printf("%02X ",(uint8_t)I2C_values[p-1]);
 	}
 SEESAW_DEBUGP printf("\n");
-    _dev->transfer((uint8_t *)&I2C_values, payload_size, nullptr, 0);
+    _dev->write_register(regHigh, regLow);
+    _dev->transfer(buf, sizeof(buf), nullptr, 0);
+    hal.scheduler->delay(10);
 
 }
