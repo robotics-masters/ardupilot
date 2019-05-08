@@ -226,12 +226,7 @@ SEESAW_DEBUG
  
 void RCOutput_SEESAW::enable_ch(uint8_t ch)
 {
-SEESAW_DEBUG
-	/* error handling */
-	if (ch >= PWM_CHAN_COUNT)
-		return;
-			
-	/* not implemented. Channels always enabled */
+
 }
 
 /**
@@ -288,6 +283,7 @@ SEESAW_DEBUG
     _pending_write_mask |= (1U << ch);
     
     if (!_corking) {
+	_corking = true;
         push();
     }
 }
