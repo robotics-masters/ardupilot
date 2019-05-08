@@ -477,24 +477,11 @@ SEESAW_DEBUG
 void RCOutput_SEESAW::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
 {
 SEESAW_DEBUG
-
-	size_t payload_size = 2+num;
-	uint8_t I2C_values[payload_size];
-	uint16_t p=0;
-	
-	I2C_values[p++]=(uint8_t)regHigh;
-SEESAW_DEBUGP printf("frame: %02X ",(uint8_t)regHigh);
-	I2C_values[p++]=(uint8_t)regLow;
-SEESAW_DEBUGP printf("%02X ",(uint8_t)regLow);
-
-	for (int i=0;i<num;i++,p++)
-	{
-		I2C_values[p++]=*buf++;
-SEESAW_DEBUGP printf("%02X ",(uint8_t)I2C_values[p-1]);
-	}
+SEESAW_DEBUGP printf("frame: %02X ",(uint8_t) regHigh);
+SEESAW_DEBUGP printf("%02X ",(uint8_t) regLow);
 SEESAW_DEBUGP printf("\n");
+	
     _dev->write_register(regHigh, regLow);
-    _dev->transfer(buf, sizeof(buf), nullptr, 0);
+    _dev->transfer(buf, num, nullptr, 0);
     hal.scheduler->delay(10);
-
 }
