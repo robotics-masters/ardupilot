@@ -180,24 +180,13 @@ SEESAW_DEBUG
 	push();
 	
 	// limit max freq reserving value 0XFFFF for error handling
-	if (freq_hz == 0XFFFF)
+	if (freq_hz == 0XFFFF){
 		freq_hz--;
-
-	bool sem = false;
-			
+	}
+		
 	for(int ch=0; ch< PWM_CHAN_COUNT; ch++){
 		
 		if(chmask&1){
-		
-			/* set semaphore if not yet so */
-			if (sem == false)
-			{
-				if (!_dev->get_semaphore()->take(10)) {
-					/* crash out if fails */
-				    break;
-				}
-				sem = true;
-			}
 
 			/* set local copy */
 			_pulses_buffer[ch].freq_hz = freq_hz;
@@ -208,10 +197,6 @@ SEESAW_DEBUG
 		}
 		chmask>>=1;
 	}
-	
-	/* release the semaphore if set */
-	_dev->get_semaphore()->give();
-
 }
 
 /**
@@ -355,22 +340,11 @@ SEESAW_DEBUG
         return;
     }
 	uint32_t channel_mask = 1U;
-
-	bool sem = false;
 			
 	for(int ch=0; ch<PWM_CHAN_COUNT; ch++){
 	
 		if(_pending_write_mask & channel_mask)
 		{
-			/* set semaphore if not yet so */
-			if (sem == false) {
-				if (!_dev->get_semaphore()->take(10)) {
-					/* crash out if fails */
-				    break;
-				}
-				sem = true;
-			}
-
 			uint16_t period_us = _pulses_buffer[ch].period_us;
 			uint8_t cmd[] = {(uint8_t) ch, (uint8_t)(period_us >> 8), (uint8_t)period_us};
 			this->writeI2C(SEESAW_TIMER_BASE, SEESAW_TIMER_PWM, cmd, 3);
@@ -380,9 +354,6 @@ SEESAW_DEBUG
 	}
 
     _pending_write_mask = 0;
-
-	/* release the semaphore if set */
-	_dev->get_semaphore()->give();
 
 
 }
@@ -480,8 +451,15 @@ SEESAW_DEBUG
 SEESAW_DEBUGP printf("frame: %02X ",(uint8_t) regHigh);
 SEESAW_DEBUGP printf("%02X ",(uint8_t) regLow);
 SEESAW_DEBUGP printf("\n");
-	
+    
+    if (!_dev->get_semaphore()->take(10)) {
+            return;
+    }
+
     _dev->write_register(regHigh, regLow);
     _dev->transfer(buf, num, nullptr, 0);
-    hal.scheduler->delay(10);
+    
+    hal.scheduler->delay(50);
+
+   _dev->get_semaphore()->give();
 }
