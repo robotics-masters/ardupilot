@@ -296,7 +296,6 @@ SEESAW_DEBUG
     _pending_write_mask |= (1U << ch);
     
     if (!_corking) {
-        _corking = true;
         push();
     }
 }
@@ -375,7 +374,7 @@ SEESAW_DEBUG
 
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
-		return 0XFFFF;	
+		return 0;	
 		
     return _pulses_buffer[ch].period_us;
 }
@@ -396,10 +395,7 @@ void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
 SEESAW_DEBUG
     for (int i = 0; i < len; i++) {
-    	if (i<PWM_CHAN_COUNT)
-        	period_us[i] = _pulses_buffer[i].period_us;
-    	else
-    		period_us[i] = 0XFFFF;
+    	period_us[i] = read(0 + i);
     }
 }
 
