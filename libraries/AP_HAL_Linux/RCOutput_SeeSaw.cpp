@@ -198,7 +198,7 @@ SEESAW_DEBUG
  *  @param      ch. The channel to read
  *
  *  @return     a uint16_t representing the frequency read from the local buffer.
- *              returns 0XFFFF in case of error
+ *              returns 0 in case of error
  *
  ****************************************************************************************/
 
@@ -212,27 +212,6 @@ SEESAW_DEBUG
     return _pulses_buffer[ch].freq_hz;
 }
 
-/**
- *****************************************************************************************
- *  @brief      Enable a channel. 
- * 
- *  @param      ch. The channel to enable
- *				the function is only provided for compatibility but has no implementation
- *				as all channels are always enabled
- *
- *  @return     none
- *
- ****************************************************************************************/
- 
-void RCOutput_SEESAW::enable_ch(uint8_t ch)
-{
-SEESAW_DEBUG
-	/* error handling */
-	if (ch >= PWM_CHAN_COUNT)
-		return;
-			
-	/* not implemented. Channels always enabled */
-}
 
 /**
  *****************************************************************************************
