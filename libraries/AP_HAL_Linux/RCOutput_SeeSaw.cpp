@@ -86,7 +86,9 @@ SEESAW_DEBUG
 void RCOutput_SEESAW::init()
 {
 SEESAW_DEBUG
+	/* Perform software reset */
 	SWreset();
+	/* Set the initial frequency(s) */
 	reset_all_channels();
 }
 
@@ -205,7 +207,7 @@ uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 SEESAW_DEBUG
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
-		return 0xFFFF;	
+		return 0;	
 		
     return _pulses_buffer[ch].freq_hz;
 }
