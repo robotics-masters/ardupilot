@@ -84,11 +84,8 @@ private:
 	void 	 writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num);
 
     AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev;
-    uint16_t _frequency;
-
-
+ 
     bool _corking = false;
-    uint8_t _channel_offset;
     uint32_t _pending_write_mask = 0;
     struct pwm_channel {
 
@@ -101,5 +98,3 @@ private:
 };
 
 }
-
-
