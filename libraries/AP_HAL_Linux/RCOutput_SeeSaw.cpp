@@ -35,8 +35,8 @@
 using namespace Linux;
 /* only for debug */
 
-#define SEESAW_DEB 
-#ifdef SEESAW_DEB 
+#define SEESAW_DEB 0
+#if SEESAW_DEB 
 #define SEESAW_DEBUG printf ("__PRETTY_FUNCTION__ = %s\n", __PRETTY_FUNCTION__); 
 #define SEESAW_DEBUGP 
 #else
@@ -60,7 +60,9 @@ static const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 RCOutput_SEESAW::RCOutput_SEESAW(AP_HAL::OwnPtr<AP_HAL::I2CDevice> dev) :
 _dev(std::move(dev))
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
    _pulses_buffer = new pwm_channel[PWM_CHAN_COUNT];  /* note the zero-filling constructor */
 }
 
@@ -68,7 +70,9 @@ SEESAW_DEBUG
 
 RCOutput_SEESAW::~RCOutput_SEESAW()
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
     delete [] _pulses_buffer;
 }
 
@@ -85,7 +89,9 @@ SEESAW_DEBUG
 
 void RCOutput_SEESAW::init()
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 	/* Perform software reset */
 	SWreset();
 	/* Set the initial frequency(s) */
@@ -204,7 +210,9 @@ SEESAW_DEBUG
 
 uint16_t RCOutput_SEESAW::get_freq(uint8_t ch)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
 		return 0;	
@@ -241,7 +249,9 @@ void RCOutput_SEESAW::enable_ch(uint8_t ch)
  ****************************************************************************************/
  void RCOutput_SEESAW::disable_ch(uint8_t ch)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
     /* error handling */
 	if (ch >= PWM_CHAN_COUNT)
 		return;	
@@ -270,7 +280,9 @@ SEESAW_DEBUG
 
 void RCOutput_SEESAW::write(uint8_t ch, uint16_t period_us)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 	/* error handling */
     if (ch >= PWM_CHAN_COUNT ) {
         return;
@@ -299,7 +311,9 @@ SEESAW_DEBUG
 
 void RCOutput_SEESAW::cork()
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
     _corking = true;
 }
 
@@ -315,7 +329,9 @@ SEESAW_DEBUG
 
 void RCOutput_SEESAW::push()
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 	/* corking is set iether explicitly or within the write() function */
     if (!_corking) {
         return;
@@ -358,7 +374,9 @@ SEESAW_DEBUG
  ****************************************************************************************/
 uint16_t RCOutput_SEESAW::read(uint8_t ch)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 
 	/* error handling */
 	if (ch >= PWM_CHAN_COUNT)
@@ -381,7 +399,9 @@ SEESAW_DEBUG
  ****************************************************************************************/
 void RCOutput_SEESAW::read(uint16_t* period_us, uint8_t len)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
     for (int i = 0; i < len; i++) {
     	period_us[i] = read(0 + i);
     }
@@ -400,7 +420,9 @@ SEESAW_DEBUG
   ****************************************************************************************/
 void RCOutput_SEESAW::write8(uint8_t regHigh, uint8_t regLow, uint8_t value)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 	if (!_dev->get_semaphore()->take_nonblocking()) {
 	    return;
 	}
@@ -431,11 +453,12 @@ SEESAW_DEBUG
  ****************************************************************************************/
 void RCOutput_SEESAW::writeI2C(uint8_t regHigh, uint8_t regLow, uint8_t *buf, uint8_t num)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
 SEESAW_DEBUGP printf("frame: %02X ",(uint8_t) regHigh);
 SEESAW_DEBUGP printf("%02X ",(uint8_t) regLow);
 SEESAW_DEBUGP printf("\n");
-    
+#endif   
     if (!_dev->get_semaphore()->take(10)) {
             return;
     }
