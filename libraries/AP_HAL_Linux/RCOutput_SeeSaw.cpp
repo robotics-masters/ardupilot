@@ -39,9 +39,6 @@ using namespace Linux;
 #if SEESAW_DEB 
 #define SEESAW_DEBUG printf ("__PRETTY_FUNCTION__ = %s\n", __PRETTY_FUNCTION__); 
 #define SEESAW_DEBUGP 
-#else
-#define SEESAW_DEBUG  
-#define SEESAW_DEBUGP /##/
 #endif
 
 #define PWM_CHAN_COUNT 8
@@ -123,7 +120,9 @@ void RCOutput_SEESAW::SWreset()
  ****************************************************************************************/
 void RCOutput_SEESAW::reset_all_channels()
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
 
 	uint32_t chmask = 1U;
 
@@ -166,7 +165,9 @@ SEESAW_DEBUG
 
 void RCOutput_SEESAW::set_freq(uint32_t chmask, uint16_t freq_hz)
 {
+#if SEESAW_DEB 
 SEESAW_DEBUG
+#endif
     /* Correctly finish last pulses ( this is from original RCOutput_PCA9685 class) */
     
     cork();
